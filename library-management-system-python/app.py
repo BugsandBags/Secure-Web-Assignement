@@ -47,6 +47,12 @@ def login():
                 session['name'] = user['first_name']
                 session['email'] = user['email']
                 session['role'] = user['role']
+
+        #Cookie Management: The code lacked cookie attribute so some new changes; 
+        #the session cookies will have 'Secure', 'Samesite','HttpOnly' and age attributes to harden their security.    
+                response = make_response(redirect(url_for('dashboard')))
+                response.set_cookie( 'secureCookie', 'loggedIn',  secure=True, httponly=True, samesite='Strict', max_age=60*60*2448)  
+                
                 mesage = 'Logged in successfully!'
                 return redirect(url_for('dashboard'))
             else:
@@ -161,6 +167,8 @@ def logout():
     session.pop('loggedin', None)
     session.pop('userid', None)
     session.pop('email', None)
+    resp = make_response("You've been logged out.")
+    resp.set_cookie('secureCookie', '', expires=0) 
     return redirect(url_for('login'))
   
 
