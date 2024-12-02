@@ -1,9 +1,13 @@
 from flask import Flask, render_template, request, redirect, url_for, session
 from flask_mysqldb import MySQL
+from flask import abort
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import MySQLdb.cursors
 import re
 import os
 import sys
+import bcrypt
   
   
 app = Flask(__name__)
@@ -15,29 +19,44 @@ app.config['MYSQL_PASSWORD'] = ''
 app.config['MYSQL_DB'] = 'library-system'
   
 mysql = MySQL(app)
+limiter = Limiter(key_func=get_remote_address)
   
 @app.route('/')
-@app.route('/login', methods =['GET', 'POST'])
+@app.route('/login', methods=['GET', 'POST'])
+#Login attempts Management: The module limiter allows for the login attempts to be limited to 5 tries,
+#Limiting login attemps manages the chances of a brute-force attack using bots or human tries.
+#In this case i've limited to 5 times a minute.
+@limiter.limit("5 per minute")
 def login():
     mesage = ''
     if request.method == 'POST' and 'email' in request.form and 'password' in request.form:
         email = request.form['email']
         password = request.form['password']
+        
         cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
-        cursor.execute('SELECT * FROM user WHERE email = % s AND password = % s', (email, password, ))
+        cursor.execute('SELECT * FROM user WHERE email = %s', (email,))
         user = cursor.fetchone()
+        
         if user:
-            session['loggedin'] = True
-            session['userid'] = user['id']
-            session['name'] = user['first_name']
-            session['email'] = user['email']
-            session['role'] = user['role']
-            mesage = 'Logged in successfully !'            
-            return redirect(url_for('dashboard'))
+            #Password validation: I'm using bcrypt which is a crypographic has function, to hash the passwords 
+            #submitted by the users and using it to confrim the passowrds match when they login
+            stored_password = user['password']
+            if bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8')):
+                session['loggedin'] = True
+                session['userid'] = user['id']
+                session['name'] = user['first_name']
+                session['email'] = user['email']
+                session['role'] = user['role']
+                mesage = 'Logged in successfully!'
+                return redirect(url_for('dashboard'))
+            else:
+                mesage = 'Incorrect password!'
         else:
-            mesage = 'Please enter correct email / password !'
-    return render_template('login.html', mesage = mesage)
-    
+            mesage = 'Account not found!'
+    elif request.method == 'POST':
+        mesage = 'Please fill out the form!'
+    return render_template('login.html', mesage=mesage)
+
 @app.route("/dashboard", methods =['GET', 'POST'])
 def dashboard():
     if 'loggedin' in session:        
@@ -144,29 +163,37 @@ def logout():
     session.pop('email', None)
     return redirect(url_for('login'))
   
-@app.route('/register', methods =['GET', 'POST'])
+
+@app.route('/register', methods=['GET', 'POST'])
 def register():
     mesage = ''
-    if request.method == 'POST' and 'name' in request.form and 'password' in request.form and 'email' in request.form :
+    if request.method == 'POST' and 'name' in request.form and 'password' in request.form and 'email' in request.form:
         userName = request.form['name']
         password = request.form['password']
         email = request.form['email']
-        cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
-        cursor.execute('SELECT * FROM user WHERE email = % s', (email, ))
-        account = cursor.fetchone()
-        if account:
-            mesage = 'Account already exists !'
+        
+        # Password validation; to confirm from the server-side that the credentials used by the user on the client-side are valid and created as per the hygienic passwords guideline
+        password_criteria = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$'
+        if not re.match(password_criteria, password):
+            mesage = 'Password must be at least 8 characters long, contain an uppercase letter, a lowercase letter, a number, and a special character.'
         elif not re.match(r'[^@]+@[^@]+\.[^@]+', email):
-            mesage = 'Invalid email address !'
-        elif not userName or not password or not email:
-            mesage = 'Please fill out the form !'
+            mesage = 'Invalid email address!'
         else:
-            cursor.execute('INSERT INTO user VALUES (NULL, % s, % s, % s)', (userName, email, password, ))
-            mysql.connection.commit()
-            mesage = 'You have successfully registered !'
+            cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+            cursor.execute('SELECT * FROM user WHERE email = %s', (email,))
+            account = cursor.fetchone()
+            if account:
+                mesage = 'Account already exists!'
+            else:
+                #Password hashing: passwords stored in plaintext pose a risk, hashing adds a secure layer of protection.
+                hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+                cursor.execute('INSERT INTO user VALUES (NULL, %s, %s, %s)', (userName, email, hashed_password))
+                mysql.connection.commit()
+                mesage = 'You have successfully registered!'
     elif request.method == 'POST':
-        mesage = 'Please fill out the form !'
-    return render_template('register.html', mesage = mesage)
+        mesage = 'Please fill out the form!'
+    return render_template('register.html', mesage=mesage)
+
 
 # Manage Books   
 @app.route("/books", methods =['GET', 'POST'])
@@ -548,6 +575,9 @@ def delete_rack():
     return redirect(url_for('login'))
     
 if __name__ == "__main__":
-    app.run()
+    app.run(debug=True)
     os.execv(__file__, sys.argv)
+
+
+
 
