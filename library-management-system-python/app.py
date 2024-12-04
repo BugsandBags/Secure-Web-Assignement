@@ -1,22 +1,26 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, make_response, render_template, request, redirect, url_for, session
 from flask_mysqldb import MySQL
 from flask import abort
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from werkzeug.security import check_password_hash
+from werkzeug.security import generate_password_hash
 import MySQLdb.cursors
 import re
 import os
 import sys
-import bcrypt
   
-  
+
 app = Flask(__name__)
+
+
    
 app.secret_key = 'abcd2123445'  
 app.config['MYSQL_HOST'] = 'localhost'
 app.config['MYSQL_USER'] = 'root'
 app.config['MYSQL_PASSWORD'] = ''
 app.config['MYSQL_DB'] = 'library-system'
+app.config['MYSQL_PORT'] = 3306
   
 mysql = MySQL(app)
 limiter = Limiter(key_func=get_remote_address)
@@ -27,8 +31,9 @@ limiter = Limiter(key_func=get_remote_address)
 #Limiting login attemps manages the chances of a brute-force attack using bots or human tries.
 #In this case i've limited to 5 times a minute.
 @limiter.limit("5 per minute")
+
 def login():
-    mesage = ''
+    message = ''
     if request.method == 'POST' and 'email' in request.form and 'password' in request.form:
         email = request.form['email']
         password = request.form['password']
@@ -36,32 +41,36 @@ def login():
         cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
         cursor.execute('SELECT * FROM user WHERE email = %s', (email,))
         user = cursor.fetchone()
+
+        print(f"Query result: {user}")  # Debugging output
         
         if user:
-            #Password validation: I'm using bcrypt which is a crypographic has function, to hash the passwords 
-            #submitted by the users and using it to confrim the passowrds match when they login
+            # Password validation is being done using werkzeug's check_password_hash module
             stored_password = user['password']
-            if bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8')):
+            print(f"Stored password: {stored_password}, Input password: {password}")
+
+            if check_password_hash(stored_password, password):
                 session['loggedin'] = True
                 session['userid'] = user['id']
                 session['name'] = user['first_name']
                 session['email'] = user['email']
                 session['role'] = user['role']
 
-        #Cookie Management: The code lacked cookie attribute so some new changes; 
-        #the session cookies will have 'Secure', 'Samesite','HttpOnly' and age attributes to harden their security.    
+                # Cookie Management: adding security attributes
                 response = make_response(redirect(url_for('dashboard')))
-                response.set_cookie( 'secureCookie', 'loggedIn',  secure=True, httponly=True, samesite='Strict', max_age=60*60*2448)  
+                response.set_cookie('secureCookie', 'loggedIn', secure=True, httponly=True, samesite='Strict', max_age=60*60*2448)  
                 
-                mesage = 'Logged in successfully!'
-                return redirect(url_for('dashboard'))
+                message = 'Logged in successfully!'
+                return response
             else:
-                mesage = 'Incorrect password!'
+                message = 'Incorrect password!'
         else:
-            mesage = 'Account not found!'
+            message = 'Account not found!'
     elif request.method == 'POST':
-        mesage = 'Please fill out the form!'
-    return render_template('login.html', mesage=mesage)
+        message = 'Please fill out the form!'
+    
+    return render_template('login.html', message=message)
+
 
 @app.route("/dashboard", methods =['GET', 'POST'])
 def dashboard():
@@ -174,37 +183,53 @@ def logout():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    mesage = ''
-    if request.method == 'POST' and 'name' in request.form and 'password' in request.form and 'email' in request.form:
-        userName = request.form['name']
+    message = '' 
+    if request.method == 'POST' and 'first_name' in request.form and 'last_name' in request.form and 'password' in request.form and 'email' in request.form:
+        first_name = request.form['first_name']
+        last_name = request.form['last_name']
         password = request.form['password']
         email = request.form['email']
         
-        # Password validation; to confirm from the server-side that the credentials used by the user on the client-side are valid and created as per the hygienic passwords guideline
+        print(f"Register request: First Name: {first_name}, Last Name: {last_name}, Email: {email}")  
+        #using this to debug the code, hoping it works
+        
+        # Password validation passwords submitted must be at least 8 characters, include uppercase, lowercase, number, special character
         password_criteria = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$'
         if not re.match(password_criteria, password):
-            mesage = 'Password must be at least 8 characters long, contain an uppercase letter, a lowercase letter, a number, and a special character.'
+            message = 'Password must be at least 8 characters long, contain an uppercase letter, a lowercase letter, a number, and a special character.'
         elif not re.match(r'[^@]+@[^@]+\.[^@]+', email):
-            mesage = 'Invalid email address!'
+            message = 'Invalid email address!'
         else:
-            cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
-            cursor.execute('SELECT * FROM user WHERE email = %s', (email,))
-            account = cursor.fetchone()
-            if account:
-                mesage = 'Account already exists!'
-            else:
-                #Password hashing: passwords stored in plaintext pose a risk, hashing adds a secure layer of protection.
-                hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-                cursor.execute('INSERT INTO user VALUES (NULL, %s, %s, %s)', (userName, email, hashed_password))
-                mysql.connection.commit()
-                mesage = 'You have successfully registered!'
-    elif request.method == 'POST':
-        mesage = 'Please fill out the form!'
-    return render_template('register.html', mesage=mesage)
+            try:
+                cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+                # Confirm if the provided email aready exists in the DB and flag it
+                cursor.execute('SELECT * FROM user WHERE email = %s', (email,))
+                account = cursor.fetchone()
+                
+                if account:
+                    message = 'Account already exists!'
+                else:
+                    # Hashing  the password
+                    hashed_password = generate_password_hash(password)
+                    print(f"Hashed Password: {hashed_password}")  
+                    
+                    # Inserting user details to the db
+                    cursor.execute('INSERT INTO user (first_name, last_name, email, password) VALUES (%s, %s, %s, %s)', 
+                                   (first_name, last_name, email, hashed_password))
+                    mysql.connection.commit()
+                    message = 'Registration successful! Please log in.'
+                    return redirect(url_for('login'))
+            except Exception as e:
+                mysql.connection.rollback()
+                print(f"Database error: {e}")  # Logs the error
+                message = 'An error occurred during registration. Please try again later.'
+
+    return render_template('register.html', message=message)
+
 
 
 # Manage Books   
-@app.route("/books", methods =['GET', 'POST'])
+@app.route("/books1", methods =['GET', 'POST'])
 def books():
     if 'loggedin' in session:
         cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
@@ -367,7 +392,7 @@ def delete_issue_book():
     return redirect(url_for('login'))
 
 # Manage Category   
-@app.route("/category", methods =['GET', 'POST'])
+@app.route("/category1", methods =['GET', 'POST'])
 def category():
     if 'loggedin' in session:        
         cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
@@ -583,7 +608,7 @@ def delete_rack():
     return redirect(url_for('login'))
     
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=3306)
     os.execv(__file__, sys.argv)
 
 
