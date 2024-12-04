@@ -5,6 +5,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.security import check_password_hash
 from werkzeug.security import generate_password_hash
+from flask_talisman import Talisman
 import MySQLdb.cursors
 import re
 import os
@@ -12,6 +13,7 @@ import sys
   
 
 app = Flask(__name__)
+talisman = Talisman()
 
 
    
@@ -24,6 +26,15 @@ app.config['MYSQL_PORT'] = 3306
   
 mysql = MySQL(app)
 limiter = Limiter(key_func=get_remote_address)
+
+# Apply Talisman with optional Content Security Policy (CSP)
+csp = {
+    'default-src': '\'self\'',  # Allow only same-origin resources
+    'script-src': '\'self\' https://cdn.jsdelivr.net',  # Allow JavaScript from a trusted CDN
+    'style-src': '\'self\' https://fonts.googleapis.com',  # Allow styles from Google Fonts
+    'img-src': '*',  # Allow images from any domain
+}
+talisman.init_app(app, content_security_policy=csp)
   
 @app.route('/')
 @app.route('/login', methods=['GET', 'POST'])
@@ -608,7 +619,7 @@ def delete_rack():
     return redirect(url_for('login'))
     
 if __name__ == "__main__":
-    app.run(debug=True, port=3306)
+    app.run(debug=True, port=3306, ssl_context=('cert.pem', 'key.pem'))
     os.execv(__file__, sys.argv)
 
 

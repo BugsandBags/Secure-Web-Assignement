@@ -77,14 +77,13 @@
               <!-- I added a functionality to allow for book to be uploaded in pdf format -->
               <div class="form-group">
                 <label for="pdf" class="control-label">Upload PDF</label>
-                <input type="file" name="pdf" id="pdf" class="form-control" accept="application/pdf"/>
+                <div class="custom-file">
+                  <input type="file" name="pdf" id="pdf" class="custom-file-input" accept="application/pdf">
+                  <label class="custom-file-label" for="pdf">Choose file</label>
+                </div>
               </div>
-            </div>
-            <div class="">
-              <input type="hidden" name="bookid" id="bookid" value="{{book.bookid}}" />
-              <input type="hidden" name="action" id="action" value="updateBook" />
-              <input type="submit" name="save" id="save" class="btn btn-info" value="Save" />
-            </div>
+              
+
           </div>
         </form>
         {% endfor %}
