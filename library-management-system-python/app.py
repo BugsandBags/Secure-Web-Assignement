@@ -5,7 +5,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.security import check_password_hash
 from werkzeug.security import generate_password_hash
-from flask_talisman import Talisman
+#from flask_talisman import Talisman
 import MySQLdb.cursors
 import re
 import os
@@ -13,28 +13,25 @@ import sys
   
 
 app = Flask(__name__)
-talisman = Talisman()
+#talisman = Talisman()
 
-
-   
-app.secret_key = 'abcd2123445'  
-app.config['MYSQL_HOST'] = 'localhost'
-app.config['MYSQL_USER'] = 'root'
-app.config['MYSQL_PASSWORD'] = ''
-app.config['MYSQL_DB'] = 'library-system'
-app.config['MYSQL_PORT'] = 3306
+app.config.from_pyfile('config.py')
   
 mysql = MySQL(app)
 limiter = Limiter(key_func=get_remote_address)
 
-# Apply Talisman with optional Content Security Policy (CSP)
-csp = {
-    'default-src': '\'self\'',  # Allow only same-origin resources
-    'script-src': '\'self\' https://cdn.jsdelivr.net',  # Allow JavaScript from a trusted CDN
-    'style-src': '\'self\' https://fonts.googleapis.com',  # Allow styles from Google Fonts
-    'img-src': '*',  # Allow images from any domain
-}
-talisman.init_app(app, content_security_policy=csp)
+#i've commented it out as it's throwing an error it not being a production environment
+# Talisman allows one to set the content security policy attributes of a web application. 
+# in my understanding, we are whitelisting the contents that appear on the website.
+# There are 2 commands: Self- resources from the same domain and none which means don't allow. 
+# Content Security Policy provides defense against XSS vulnerabilities.
+#csp = {
+   # 'default-src': '\'self\'',  #  This would allow resources from the same domain
+    #'script-src': '\'self\' https://cdn.jsdelivr.net',  # this is for the JavaScript scripts
+    #'style-src': '\'self\' https://fonts.googleapis.com',  # for the css styling
+    #'img-src': '*',  # Allows images from any domain
+#}
+#talisman.init_app(app, content_security_policy=csp)
   
 @app.route('/')
 @app.route('/login', methods=['GET', 'POST'])
@@ -619,7 +616,9 @@ def delete_rack():
     return redirect(url_for('login'))
     
 if __name__ == "__main__":
-    app.run(debug=True, port=3306, ssl_context=('cert.pem', 'key.pem'))
+    app.run(debug=True, port=3306)
+    #When using talisman, we can generate the ssl certificates and configure the details generated here for the web application to use HTTPs
+      #app.run(ssl_context=('cert.pem', 'key.pem'))
     os.execv(__file__, sys.argv)
 
 
