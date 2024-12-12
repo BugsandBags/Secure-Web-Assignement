@@ -5,6 +5,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.security import check_password_hash
 from werkzeug.security import generate_password_hash
+#from flask_seasurf import SeaSurf
 #from flask_talisman import Talisman
 import MySQLdb.cursors
 import re
@@ -13,12 +14,19 @@ import sys
   
 
 app = Flask(__name__)
+app.config.from_pyfile('config.py')
 #talisman = Talisman()
 
-app.config.from_pyfile('config.py')
+#This protects the application from CSRF attacks
+#csrf = SeaSurf(app)
   
 mysql = MySQL(app)
-limiter = Limiter(key_func=get_remote_address)
+#Rate Limiting: At a global level to cover the whole application
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    default_limits=["100 per day", "40 per hour"]
+    )
 
 #i've commented it out as it's throwing an error it not being a production environment
 # Talisman allows one to set the content security policy attributes of a web application. 
@@ -35,9 +43,7 @@ limiter = Limiter(key_func=get_remote_address)
   
 @app.route('/')
 @app.route('/login', methods=['GET', 'POST'])
-#Login attempts Management: The module limiter allows for the login attempts to be limited to 5 tries,
-#Limiting login attemps manages the chances of a brute-force attack using bots or human tries.
-#In this case i've limited to 5 times a minute.
+#Rate Limiting: At a Route level.  The module limiter allows for the login attempts to be limited to 5 tries a minute,
 @limiter.limit("5 per minute")
 
 def login():
@@ -64,7 +70,7 @@ def login():
                 session['email'] = user['email']
                 session['role'] = user['role']
 
-                # Cookie Management: adding security attributes
+                # Cookie Management: i've added the following security attributes to the cookies to secure against csrf, mitm
                 response = make_response(redirect(url_for('dashboard')))
                 response.set_cookie('secureCookie', 'loggedIn', secure=True, httponly=True, samesite='Strict', max_age=60*60*2448)  
                 
@@ -217,7 +223,8 @@ def register():
                 if account:
                     message = 'Account already exists!'
                 else:
-                    # Hashing  the password
+                    # Hashing  the password using  werkzeug.security's check_password_hash 
+                    # and generate_password_hash libraries
                     hashed_password = generate_password_hash(password)
                     print(f"Hashed Password: {hashed_password}")  
                     
@@ -229,7 +236,7 @@ def register():
                     return redirect(url_for('login'))
             except Exception as e:
                 mysql.connection.rollback()
-                print(f"Database error: {e}")  # Logs the error
+                print(f"Database error: {e}")  # my debuuging hailmary
                 message = 'An error occurred during registration. Please try again later.'
 
     return render_template('register.html', message=message)

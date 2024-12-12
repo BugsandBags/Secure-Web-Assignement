@@ -3,7 +3,7 @@
 
 # For the secret key
 
-secret_key = 'abcd2123445' 
+SECRET_KEY = 'abcd2123445' 
 
 # The database Configuration details:
 
