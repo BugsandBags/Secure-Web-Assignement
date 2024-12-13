@@ -83,7 +83,7 @@ def login():
                 message = 'Logged in successfully!'
                 return response
             else:
-                message = 'Incorrect password!'
+                message = 'Invalid credentials!'
         else:
             message = 'Account not found!'
     elif request.method == 'POST':
