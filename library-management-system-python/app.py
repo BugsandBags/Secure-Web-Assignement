@@ -5,6 +5,8 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.security import check_password_hash
 from werkzeug.security import generate_password_hash
+from flask import Flask, request, session, redirect, url_for, render_template, make_response
+from datetime import timedelta
 #from flask_seasurf import SeaSurf
 #from flask_talisman import Talisman
 import MySQLdb.cursors
@@ -56,19 +58,23 @@ def login():
         cursor.execute('SELECT * FROM user WHERE email = %s', (email,))
         user = cursor.fetchone()
 
-        print(f"Query result: {user}")  # Debugging output
+        print(f"Query result: {user}")  
         
         if user:
             # Password validation is being done using werkzeug's check_password_hash module
             stored_password = user['password']
             print(f"Stored password: {stored_password}, Input password: {password}")
 
-            if check_password_hash(stored_password, password):
+            if  user and check_password_hash(user['password'], password):
+                session.clear()  # Session Management: This clears the cached details for the existing session
                 session['loggedin'] = True
                 session['userid'] = user['id']
                 session['name'] = user['first_name']
                 session['email'] = user['email']
                 session['role'] = user['role']
+                session.permanent = True #Session Management: this allows for the session timeout to b set to expire to specific time 
+                #in this case it's set to 60 minutes.
+                app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=60)
 
                 # Cookie Management: i've added the following security attributes to the cookies to secure against csrf, mitm
                 response = make_response(redirect(url_for('dashboard')))
