@@ -1,8 +1,12 @@
-# Secure Web Assignement
+
 👩🏾‍💻Module: Secure Web Development
+
 👩🏾‍🎓Credentials: Jacklyne Mbuthia -x23318104
+
 📚Project: A Library Management System
+
 💻Framework Used: Html, Css, Python - Flask with the database running on MySQL. I used the XAMPP panel to run my MySQL database. 
+
 🔒Security Requirements: The following security requirements influenced the security implementations, I added to the web application
 👥1.	Authentication
 1.1	Secure password creation: The existing password creation process was not adhering to the password best practices. The length and strength of the password is not checked. 
